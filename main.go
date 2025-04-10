@@ -15,14 +15,15 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var projectFolderName string
 var baseURL string
 var foundUrlFileName string
 var scrapedUrlFileName string
 var downloadedFilesFolderName string
 
 func ensureFoldersAndFiles() {
-	os.MkdirAll("site_pages", os.ModePerm)
-	for _, f := range []string{"found_urls.txt", "scraped_urls.txt"} {
+	os.MkdirAll(downloadedFilesFolderName, os.ModePerm)
+	for _, f := range []string{foundUrlFileName, scrapedUrlFileName} {
 		if _, err := os.Stat(f); os.IsNotExist(err) {
 			os.WriteFile(f, []byte(""), 0644)
 		}
@@ -143,7 +144,7 @@ func scrapeAndSave(url string, index int) ([]string, error) {
 	if fileName == "" {
 		fileName = "index"
 	}
-	filePath := filepath.Join("site_pages", fileName+".html")
+	filePath := filepath.Join(downloadedFilesFolderName, fileName+".html")
 	err = ioutil.WriteFile(filePath, bodyBytes, 0644)
 	if err != nil {
 		return nil, err
@@ -169,7 +170,7 @@ func scrapeAndSave(url string, index int) ([]string, error) {
 
 func storeURLs(urls []string) {
 	for _, url := range urls {
-		_ = appendLineIfNotExists("found_urls.txt", url)
+		_ = appendLineIfNotExists(foundUrlFileName, url)
 	}
 }
 
@@ -180,10 +181,11 @@ func main() {
 	}
 
 	// Get the BASE_URL environment variable
+	projectFolderName = os.Getenv("PROJECT_FOLDERNAME")
 	baseURL = os.Getenv("BASE_URL")
-	foundUrlFileName = os.Getenv("FOUND_URLS_FILENAME")
-	scrapedUrlFileName = os.Getenv("SCRAPED_URLS_FILENAME")
-	downloadedFilesFolderName = os.Getenv("DOWNLOADED_FILES_FOLDERNAME")
+	foundUrlFileName = projectFolderName + "/" + os.Getenv("FOUND_URLS_FILENAME")
+	scrapedUrlFileName = projectFolderName + "/" + os.Getenv("SCRAPED_URLS_FILENAME")
+	downloadedFilesFolderName = projectFolderName + "/" + os.Getenv("DOWNLOADED_FILES_FOLDERNAME")
 	if baseURL == "" {
 		log.Fatal("BASE_URL is not set in the environment variables")
 	}
@@ -198,8 +200,8 @@ func main() {
 
 	for {
 		// Read the lines from the files
-		foundURLs, _ := readLines("found_urls.txt")
-		scrapedURLs, _ := readLines("scraped_urls.txt")
+		foundURLs, _ := readLines(foundUrlFileName)
+		scrapedURLs, _ := readLines(scrapedUrlFileName)
 
 		fmt.Printf("STATUS: \n\tTOTAL=%d \n\tSCRAPED=%d \n\tUNSCRAPED=%d\n", len(foundURLs), len(scrapedURLs), len(foundURLs)-len(scrapedURLs))
 		// If both files have the same number of lines, exit the loop
@@ -230,8 +232,8 @@ func main() {
 			// Store new links found during scraping
 			storeURLs(newLinks)
 
-			// Add the current URL to scraped_urls.txt if not already present
-			_ = appendLineIfNotExists("scraped_urls.txt", url)
+			// Add the current URL to scraped_urls file if not already present
+			_ = appendLineIfNotExists(scrapedUrlFileName, url)
 		}
 
 		// Pause before the next iteration to allow updates to the files
