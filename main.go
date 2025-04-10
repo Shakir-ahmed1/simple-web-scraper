@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"sync"
+
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/joho/godotenv"
@@ -20,6 +22,29 @@ var baseURL string
 var foundUrlFileName string
 var scrapedUrlFileName string
 var downloadedFilesFolderName string
+
+type Job struct {
+	URL   string
+	Index int
+}
+
+func worker(id int, jobs <-chan Job, wg *sync.WaitGroup, mu *sync.Mutex) {
+	defer wg.Done()
+	for job := range jobs {
+		fmt.Printf("[Worker %d] Scraping: %s\n", id, job.URL)
+		newLinks, err := scrapeAndSave(job.URL, job.Index)
+		if err != nil {
+			fmt.Println("Error scraping:", job.URL, err)
+			continue
+		}
+
+		// Lock for file write operations
+		mu.Lock()
+		storeURLs(newLinks)
+		_ = appendLineIfNotExists(scrapedUrlFileName, job.URL)
+		mu.Unlock()
+	}
+}
 
 func ensureFoldersAndFiles() {
 	os.MkdirAll(downloadedFilesFolderName, os.ModePerm)
@@ -220,21 +245,25 @@ func main() {
 		}
 
 		// Scrape the URLs starting from the current index
-		for i := startIndex; i < len(foundURLs); i++ {
-			url := foundURLs[i]
-
-			newLinks, err := scrapeAndSave(url, i)
-			if err != nil {
-				fmt.Println("Failed to scrape", url, ":", err)
-				continue
-			}
-
-			// Store new links found during scraping
-			storeURLs(newLinks)
-
-			// Add the current URL to scraped_urls file if not already present
-			_ = appendLineIfNotExists(scrapedUrlFileName, url)
+		const numWorkers = 10
+		jobChan := make(chan Job, len(foundURLs))
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		
+		// Start workers
+		for w := 1; w <= numWorkers; w++ {
+			wg.Add(1)
+			go worker(w, jobChan, &wg, &mu)
 		}
+		
+		// Send jobs
+		for i := startIndex; i < len(foundURLs); i++ {
+			jobChan <- Job{URL: foundURLs[i], Index: i}
+		}
+		close(jobChan) // No more jobs
+		
+		wg.Wait() // Wait for all workers to finish
+		
 
 		// Pause before the next iteration to allow updates to the files
 		time.Sleep(1 * time.Second) // Adjust the duration as necessary
