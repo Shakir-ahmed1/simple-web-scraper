@@ -201,6 +201,7 @@ func main() {
 		foundURLs, _ := readLines("found_urls.txt")
 		scrapedURLs, _ := readLines("scraped_urls.txt")
 
+		fmt.Printf("STATUS: \n\tTOTAL=%d \n\tSCRAPED=%d \n\tUNSCRAPED=%d\n", len(foundURLs), len(scrapedURLs), len(foundURLs)-len(scrapedURLs))
 		// If both files have the same number of lines, exit the loop
 		if len(foundURLs) == len(scrapedURLs) {
 			fmt.Println("Scraping completed successfully ✅")
